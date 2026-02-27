@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visual RSS Builder</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 1100px; margin: 20px auto; background: #f0f2f5; padding: 20px; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .step-box { padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 2px solid #eee; transition: 0.3s; }
+        .active-step { border-color: #ff6600; background: #fffcf9; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+        .btn { padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-green { background: #28a745; color: white; }
+        .btn-green:hover { background: #218838; }
+        .btn-reset { background: #6c757d; color: white; }
+        .btn-gen { background: #ff6600; color: white; width: 100%; font-size: 1.1em; margin-top: 10px; }
+        .btn-gen:hover { background: #e65c00; }
+        
+        #resultArea { display: none; margin-top: 30px; padding: 20px; background: #e8f5e9; border: 2px solid #28a745; border-radius: 10px; animation: slideDown 0.4s ease-out; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        iframe { width: 100%; height: 600px; border: 2px solid #ddd; border-radius: 10px; margin-top: 25px; display:none; }
+        .copy-group { display: flex; gap: 10px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Visual RSS Builder</h1>
+        <p style="color: #666;">Create a custom RSS feed from any website visually.</p>
+        
+        <label><strong>1. Target Website URL</strong></label>
+        <div style="display:flex; gap:10px; margin-bottom: 20px;">
+            <input type="url" id="urlInput" placeholder="https://techcrunch.com" style="flex:4">
+            <button class="btn btn-green" onclick="loadPreview()" style="flex:1">Load Preview</button>
+        </div>
+
+        <div id="step1" class="step-box active-step">
+            <strong>Step 2: Item Container Selector</strong>
+            <input type="text" id="item_css" placeholder="Click the outer box of an article in the preview..." readonly>
+        </div>
+
+        <div id="step2" class="step-box">
+            <strong>Step 3: Title Element Selector</strong>
+            <input type="text" id="title_css" placeholder="Click the specific headline text in the preview..." readonly>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button type="button" class="btn btn-reset" onclick="resetAll()">Reset Selectors</button>
+            <button type="button" class="btn btn-gen" onclick="generateLink()">Generate Permanent RSS Link</button>
+        </div>
+
+        <div id="resultArea">
+            <h3 style="margin-top:0; color: #1b5e20;">🎉 Feed Created Successfully!</h3>
+            <p>Copy the link below and paste it into <strong>Feedly, Inoreader,</strong> or your favorite RSS app:</p>
+            <div class="copy-group">
+                <input type="text" id="finalRssUrl" readonly>
+                <button class="btn btn-green" onclick="copyToClipboard()">Copy Link</button>
+            </div>
+            <p style="font-size: 0.85em; color: #555; margin-top: 10px;">
+                <em>Note: Your app must be running for this link to work.</em>
+            </p>
+        </div>
+
+        <iframe id="preview"></iframe>
+    </div>
+
+    <script>
+        let currentStep = 1;
+
+        function loadPreview() {
+            const url = document.getElementById('urlInput').value;
+            if(!url) return alert("Please enter a URL first!");
+            const frame = document.getElementById('preview');
+            frame.style.display = 'block';
+            frame.src = '/preview?url=' + encodeURIComponent(url);
+            resetAll();
+        }
+
+        function resetAll() {
+            currentStep = 1;
+            document.getElementById('item_css').value = "";
+            document.getElementById('title_css').value = "";
+            document.getElementById('step1').className = 'step-box active-step';
+            document.getElementById('step2').className = 'step-box';
+            document.getElementById('resultArea').style.display = 'none';
+        }
+
+        window.addEventListener('message', function(e) {
+            if (e.data.type === 'SELECTOR') {
+                const frame = document.getElementById('preview').contentWindow;
+                if (currentStep === 1) {
+                    document.getElementById('item_css').value = e.data.value;
+                    frame.postMessage({action: 'apply', cls: 'selected-container'}, '*');
+                    document.getElementById('step1').className = 'step-box';
+                    document.getElementById('step2').className = 'step-box active-step';
+                    currentStep = 2;
+                } else if (currentStep === 2) {
+                    document.getElementById('title_css').value = e.data.value;
+                    frame.postMessage({action: 'apply', cls: 'selected-title'}, '*');
+                    currentStep = 3;
+                }
+            }
+        });
+
+        function generateLink() {
+            const url = document.getElementById('urlInput').value;
+            const item = document.getElementById('item_css').value;
+            const title = document.getElementById('title_css').value;
+
+            if(!url || !item || !title) {
+                return alert("Please complete all steps (URL, Container, and Title)!");
+            }
+
+            // Construct the permanent link using the /feed route
+            const baseUrl = window.location.origin;
+            const permanentLink = `${baseUrl}/feed?url=${encodeURIComponent(url)}&item=${encodeURIComponent(item)}&title=${encodeURIComponent(title)}`;
+            
+            document.getElementById('finalRssUrl').value = permanentLink;
+            document.getElementById('resultArea').style.display = 'block';
+            document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function copyToClipboard() {
+            const copyText = document.getElementById("finalRssUrl");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            document.execCommand("copy");
+            alert("RSS Link Copied to clipboard!");
+        }
+    </script>
+</body>
+</html>
